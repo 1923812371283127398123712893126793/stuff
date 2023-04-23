@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Cat Generator</title>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+  <h1>Cat Generator</h1>
+  <form id="catForm" onsubmit="generateCats(); return false;">
+    <label for="count">Number of Cat Pictures (Max: 200):</label>
+    <input type="number" id="count" name="count" min="1" max="200">
+    <input type="submit" value="Generate">
+  </form>
+  <div id="catImagesContainer"></div>
+
+  <script>
+    function generateCats() {
+      const count = parseInt(document.getElementById('count').value) || 1; // Get the number of cat pictures to generate from the input field, default to 1
+      if (count < 1 || count > 200) {
+        alert('Invalid count. Please enter a number between 1 and 200.');
+        return;
+      }
+
+      // Fetch cat pictures from Cat-API
+      $.get(`https://api.thecatapi.com/v1/images/search?limit=${count}`)
+        .then(response => {
+          const catImages = response.map(cat => cat.url);
+          const catImagesContainer = document.getElementById('catImagesContainer');
+          catImagesContainer.innerHTML = ''; // Clear previous cat images
+          for (let i = 0; i < catImages.length; i++) {
+            const catImageLink = document.createElement('a');
+            catImageLink.href = catImages[i];
+            catImageLink.download = `cat_${i + 1}.jpg`;
+            catImageLink.textContent = `Download Cat Picture ${i + 1}`;
+            catImagesContainer.appendChild(catImageLink);
+            catImagesContainer.appendChild(document.createElement('br'));
+          }
+        })
+        .catch(error => console.error(error));
+    }
+  </script>
+</body>
+</html>
