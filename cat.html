@@ -22,27 +22,15 @@
         return;
       }
 
-     
-      $.get(`https://cataas.com/api/cats?limit=${count}&json=true`)
-        .then(response => {
-          const catMemeImages = response.map(catMeme => catMeme.url);
-          const catMemeImagesContainer = document.getElementById('catMemeImagesContainer');
-          catMemeImagesContainer.innerHTML = ''; // Clear previous cat memes
-          for (let i = 0; i < catMemeImages.length; i++) {
-            const catMemeImageLink = document.createElement('a');
-            catMemeImageLink.href = catMemeImages[i];
-            catMemeImageLink.download = `cat_meme_${i + 1}.jpg`;
-            catMemeImageLink.textContent = `Download Cat Meme ${i + 1}`;
-            catMemeImagesContainer.appendChild(catMemeImageLink);
-            catMemeImagesContainer.appendChild(document.createElement('br'));
+      const catMemeImagesContainer = document.getElementById('catMemeImagesContainer');
+      catMemeImagesContainer.innerHTML = ''; // Clear previous cat memes
 
-            const catMemeImage = document.createElement('img');
-            catMemeImage.src = catMemeImages[i];
-            catMemeImagesContainer.appendChild(catMemeImage);
-            catMemeImagesContainer.appendChild(document.createElement('br'));
-          }
-        })
-        .catch(error => console.error(error));
+      for (let i = 0; i < count; i++) {
+        const catMemeImage = document.createElement('img');
+        catMemeImage.src = `https://cataas.com/cat/cute?api=true`;
+        catMemeImagesContainer.appendChild(catMemeImage);
+        catMemeImagesContainer.appendChild(document.createElement('br'));
+      }
     }
   </script>
 </body>
