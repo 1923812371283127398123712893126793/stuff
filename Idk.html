@@ -1,106 +1,85 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Stable Diffusion Visualization</title>
+    <title>ASCII Mid-Journey Text Diffusion</title>
     <style>
-        /* Add some basic styling for the page */
-        body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-
-        canvas {
-            border: 1px solid #000;
+        /* Style for the output text */
+        #outputText {
+            font-family: monospace;
+            white-space: pre;
+            font-size: 14px;
+            line-height: 1.2;
         }
     </style>
-</head>
-<body>
-    <h1>Stable Diffusion Visualization</h1>
-    <form>
-        <label for="diffusionRateInput">Diffusion Rate (0-1):</label>
-        <input type="number" id="diffusionRateInput" step="0.01" min="0" max="1" value="0.1">
-        <label for="stepsInput">Number of Steps:</label>
-        <input type="number" id="stepsInput" step="1" min="1" max="1000" value="10">
-        <button type="button" onclick="startDiffusion()">Start Diffusion</button>
-    </form>
-    <canvas id="gridCanvas" width="400" height="400"></canvas>
-
     <script>
-        // Get canvas and context
-        const canvas = document.getElementById('gridCanvas');
-        const ctx = canvas.getContext('2d');
+        // Function to handle form submission
+        function submitForm() {
+            // Get input values from form
+            var inputText = document.getElementById("inputText").value;
+            var diffusionRate = document.getElementById("diffusionRate").value;
+            var numIterations = document.getElementById("numIterations").value;
 
-        // Grid size
-        const gridSizeX = 20;
-        const gridSizeY = 20;
+            // Call the diffusion function with input values
+            var outputText = diffuseText(inputText, diffusionRate, numIterations);
 
-        // Get diffusion rate and number of steps from input
-        let diffusionRate = parseFloat(document.getElementById('diffusionRateInput').value);
-        let steps = parseInt(document.getElementById('stepsInput').value);
-
-        // Initialize the grid with values
-        let grid = new Array(gridSizeX).fill(null).map(() => new Array(gridSizeY).fill(0));
-        grid[Math.floor(gridSizeX / 2)][Math.floor(gridSizeY / 2)] = 1;
-
-        // Function to draw the grid on the canvas
-        function drawGrid() {
-            const cellSize = Math.min(canvas.width / gridSizeX, canvas.height / gridSizeY);
-            const cellOffsetX = (canvas.width - cellSize * gridSizeX) / 2;
-            const cellOffsetY = (canvas.height - cellSize * gridSizeY) / 2;
-
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            for (let x = 0; x < gridSizeX; x++) {
-                for (let y = 0; y < gridSizeY; y++) {
-                    ctx.fillStyle = `rgba(0, 0, 0, ${grid[x][y]})`;
-                    ctx.fillRect(cellOffsetX + x * cellSize, cellOffsetY + y * cellSize, cellSize, cellSize);
-                }
-            }
+            // Update the output element with the result
+            document.getElementById("outputText").innerText = outputText;
         }
 
-        // Perform diffusion for a given number of steps
-        function diffuse() {
-            for (let step = 0; step < steps; step++) {
-                let newGrid = new Array(gridSizeX).fill(null).map(() => new Array(gridSizeY).fill(0));
+        // Function to perform ASCII text diffusion
+        function diffuseText(text, diffusionRate, numIterations) {
+            var outputText = text;
 
-                for (let x = 0; x < gridSizeX; x++) {
-                    for (let y = 0; y < gridSizeY; y++) {
-                        const left = (x === 0) ? grid[x][y] : grid[x - 1][y];
-                        const right = (x === gridSizeX - 1) ? grid[x][y] : grid[x + 1][y];
-                        const up = (y === 0) ? grid[x][y] : grid[x][y - 1];
-                        const down = (y === gridSizeY - 1) ? grid[x][y] : grid[x][y + 1];
+            // Loop for the specified number of iterations
+            for (var i = 0; i < numIterations; i++) {
+                var diffusedText = "";
 
-                        // Calculate the average of neighboring cells
-                        const avg = (left + right + up + down) / 4;
+                // Loop through each character in the input text
+                for (var j = 0; j < outputText.length; j++) {
+                    // Randomly select a neighbor character
+                    var neighborIndex = Math.floor(Math.random() * outputText.length);
+                    var neighborChar = outputText[neighborIndex];
 
-                        // Update the new grid with diffusion rate
-                        newGrid[x][y] = avg * diffusionRate;
+                    // Calculate the diffusion rate
+                    var diffusionChance = Math.random();
+                    if (diffusionChance <= diffusionRate) {
+                        // Replace the current character with the neighbor character
+                        diffusedText += neighborChar;
+                    } else {
+                        // Keep the current character unchanged
+                        diffusedText += outputText[j];
                     }
                 }
-                // Update the grid with the new values
-                grid = newGrid;
+
+                // Update the output text with the diffused text
+                outputText = diffusedText;
+
+                // Update the output element with the current diffused text
+                document.getElementById("outputText").innerText = outputText;
+
+                // Delay for a short duration to create a "mid-journey" effect
+                await new Promise(resolve => setTimeout(resolve, 100));
             }
+
+            return outputText;
         }
-
-        // Function to start the diffusion animation
-        function startDiffusion() {
-            // Get diffusion rate and number of steps from input
-            diffusionRate = parseFloat(document.getElementById('diffusionRateInput').value);
-            steps = parseInt(document.getElementById('stepsInput').value);
-
-            // Clear the canvas
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // Perform diffusion
-            diffuse();
-
-            // Draw the grid
-            drawGrid();
-        }
-
-        // Initial draw of the grid
-        drawGrid();
     </script>
+</head>
+<body>
+    <h1>ASCII Mid-Journey Text Diffusion</h1>
+    <form onsubmit="event.preventDefault(); submitForm();">
+        <label for="inputText">Input Text:</label>
+        <input type="text" id="inputText" name="inputText">
+        <br>
+        <label for="diffusionRate">Diffusion Rate:</label>
+        <input type="number" id="diffusionRate" name="diffusionRate" step="0.01" min="0" max="1">
+        <br>
+        <label for="numIterations">Number of Iterations:</label>
+        <input type="number" id="numIterations" name="numIterations" min="1">
+        <br>
+        <button type="submit">Submit</button>
+    </form>
+    <h2>Output Text:</h2>
+    <pre id="outputText"></pre>
 </body>
 </html>
-
