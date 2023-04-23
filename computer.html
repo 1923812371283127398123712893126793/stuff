@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Computer Simulator</title>
+</head>
+
+<body>
+  <h1>Computer Simulator</h1>
+  <form id="calcForm">
+    <label for="input">Enter an expression:</label>
+    <input type="text" id="input" name="input">
+    <button type="submit">Calculate</button>
+  </form>
+  <div id="resultContainer">
+    <h2>Result:</h2>
+    <p id="result"></p>
+  </div>
+  <div id="errorContainer">
+    <h2>Error:</h2>
+    <p id="error"></p>
+  </div>
+  <a id="downloadLink" href="#" download="log.txt">Download Log</a>
+
+  <script>
+    document.getElementById('calcForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const input = document.getElementById('input').value;
+      try {
+        // Evaluating the input using JavaScript's built-in eval() function
+        const result = eval(input);
+
+        // Converting the result to hexadecimal
+        const hexResult = '0x' + Number(result).toString(16);
+
+        // Logging the calculation to log.txt
+        const logEntry = `${input} = ${hexResult}\n`;
+        await fetch('/calculate', {
+          method: 'POST',
+          body: new URLSearchParams({ input }),
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+          }
+        });
+        
+        document.getElementById('resultContainer').style.display = 'block';
+        document.getElementById('errorContainer').style.display = 'none';
+        document.getElementById('result').textContent = hexResult;
+        document.getElementById('downloadLink').style.display = 'block';
+      } catch (err) {
+        console.error('Error:', err);
+        document.getElementById('resultContainer').style.display = 'none';
+        document.getElementById('errorContainer').style.display = 'block';
+        document.getElementById('error').textContent = err;
+        document.getElementById('downloadLink').style.display = 'none';
+      }
+    });
+  </script>
+</body>
+
+</html>
