@@ -56,8 +56,11 @@
                 const text = await response.text();
                 const lines = text.split(/\r?\n/); // Handle different line endings
 
-                // Check if username is found in any line after trimming whitespace
-                const isBreached = lines.some(line => line.trim() === username);
+                // Check if username is found in any line, accounting for the format
+                const isBreached = lines.some(line => {
+                    const [user] = line.split(':').map(part => part.trim());
+                    return user === username;
+                });
 
                 if (isBreached) {
                     messageElement.textContent = 'Oh no! You have been breached! :( Change your password immediately.';
