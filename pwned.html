@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Username Breach Check</title>
+    <style>
+        body {
+            background-color: #121212;
+            color: #e0e0e0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+        h1 {
+            color: #f5f5f5;
+        }
+        label {
+            margin-right: 10px;
+        }
+        input[type="text"] {
+            padding: 5px;
+            border: 1px solid #333;
+            border-radius: 3px;
+            background-color: #1e1e1e;
+            color: #e0e0e0;
+        }
+        button {
+            padding: 5px 10px;
+            border: none;
+            border-radius: 3px;
+            background-color: #1f80e0;
+            color: #fff;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        button:hover {
+            background-color: #0d6efd;
+        }
+        #message {
+            margin-top: 20px;
+        }
+    </style>
+    <script>
+        async function checkUsername() {
+            const username = document.getElementById('username').value.trim();
+            const url = 'https://raw.githubusercontent.com/Unkown403/Rest-In-Peace-To-Our-Fallen-Heroes/main/solara';
+            const messageElement = document.getElementById('message');
+
+            try {
+                const response = await fetch(url);
+                const text = await response.text();
+                const lines = text.split('\n');
+
+                if (lines.includes(username)) {
+                    messageElement.textContent = 'Oh no! You have been breached! :( Change your password immediately.';
+                } else {
+                    messageElement.textContent = 'Your username is safe.';
+                }
+            } catch (error) {
+                messageElement.textContent = 'Error checking username. Please try again later.';
+            }
+        }
+    </script>
+</head>
+<body>
+    <h1>Check Username for Breach</h1>
+    <label for="username">Enter Username:</label>
+    <input type="text" id="username">
+    <button onclick="checkUsername()">Check</button>
+    <p id="message"></p>
+</body>
+</html>
