@@ -1,10 +1,1 @@
-local function decrypt(encryptedStr) 
-    local keyData, encData = encryptedStr:match("^(.-)|(.*)$") 
-    if not keyData or not encData then error("Invalid format") end 
-    local decTable = {} 
-    for i = 1, #keyData, 2 do decTable[keyData:sub(i+1,i+1)] = keyData:sub(i,i) end 
-    local decrypted = {} 
-    for i = 1, #encData do table.insert(decrypted, decTable[encData:sub(i,i)] or encData:sub(i,i)) end 
-    loadstring(table.concat(decrypted))() 
-end 
-return decrypt
+local function d(s)local k,e=s:match("^(.-)|(.*)$")if not k or not e then error("Invalidformat")end local t={}for i=1,#k,2 do t[k:sub(i+1,i+1)]=k:sub(i,i)end local r={}for i=1,#e do table.insert(r,t[e:sub(i,i)]or e:sub(i,i))end loadstring(table.concat(r))()end return d
