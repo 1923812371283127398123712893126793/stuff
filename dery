@@ -1,1 +1,25 @@
-local function d(s)local k,e=s:match("^(.-)|(.*)$")if not k or not e then error("Invalidformat")end local t={}for i=1,#k,2 do t[k:sub(i+1,i+1)]=k:sub(i,i)end local r={}for i=1,#e do table.insert(r,t[e:sub(i,i)]or e:sub(i,i))end loadstring(table.concat(r))()end return d
+-- Decrypt function
+local function decryptText(input)
+    local key, encrypted = input:match("^(.-)|(.*)$")
+    if not key or not encrypted then
+        error("Invalid format")
+    end
+
+    -- Reconstruct the decryption map
+    local decryptMap = {}
+    for i = 1, #key, 2 do
+        decryptMap[key:sub(i + 1, i + 1)] = key:sub(i, i)
+    end
+
+    -- Decrypt the text
+    local result = {}
+    for i = 1, #encrypted do
+        local char = encrypted:sub(i, i)
+        table.insert(result, decryptMap[char] or char)
+    end
+
+    -- Execute the decrypted Lua code
+    loadstring(table.concat(result))()
+end
+
+return decryptText
