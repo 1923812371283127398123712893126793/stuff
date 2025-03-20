@@ -1,40 +1,35 @@
-return function(input)
-    local shift, key, encrypted = input:match("^(%d+)|(.-)|(.*)$")
-    shift = tonumber(shift)
-    if not shift or not key or not encrypted then
-        error("Invalid format: Decryption key or shift missing")
-    end
-
-    -- Reconstruct decryption map
-    local decryptMap = {}
-    for i = 1, #key, 2 do
-        local original = key:sub(i, i)
-        local encryptedChar = key:sub(i + 1, i + 1)
-        decryptMap[encryptedChar] = original
-    end
-
-    -- Decrypt the text
-    local result = {}
-    for i = 1, #encrypted do
-        local char = encrypted:sub(i, i)
-        local originalChar = decryptMap[char] or char -- Reverse map
-        local shiftedByte = originalChar:byte() - shift
-
-        -- Keep within printable ASCII range
-        if shiftedByte < 32 then
-            shiftedByte = ((shiftedByte - 32 + 95) % 95) + 32
+local function extract_parts(encrypted_str)
+    local separator_index
+    for i = 1, #encrypted_str do
+        local char = encrypted_str:sub(i, i)
+        if char:match("[%p]") then -- Detects first punctuation mark (separator)
+            separator_index = i
+            break
         end
-
-        table.insert(result, string.char(shiftedByte))
     end
 
-    local decryptedString = table.concat(result)
+    if not separator_index then return nil, nil end -- If no separator found, return nil
+    local key = encrypted_str:sub(1, separator_index - 1)
+    local encrypted_data = encrypted_str:sub(separator_index + 1)
+    return key, encrypted_data
+end
 
-    -- Ensure valid Lua syntax before execution
-    local chunk, err = loadstring(decryptedString)
-    if not chunk then
-        error("Decryption failed: Invalid Lua syntax → " .. err .. "\nDecrypted Code:\n" .. decryptedString)
+local function custom_decrypt(encrypted_data, key)
+    local decrypted = {}
+
+    for i = 1, #encrypted_data do
+        local char = encrypted_data:sub(i, i)
+        local key_char = key:sub((i % #key) + 1, (i % #key) + 1)
+        local original_char = string.char(((char:byte() ~ key_char:byte()) % 94) + 33) -- Reverse XOR with key
+        table.insert(decrypted, original_char)
     end
 
-    return chunk()
+    return table.concat(decrypted, "")
+end
+
+return function(encrypted_str)
+    local key, encrypted_data = extract_parts(encrypted_str)
+    if not key or not encrypted_data then return error("Invalid encrypted string") end
+    local decrypted_code = custom_decrypt(encrypted_data, key)
+    return loadstring(decrypted_code)
 end
