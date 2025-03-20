@@ -1,9 +1,21 @@
+
+
 local function customDecrypt(encStr)
     local decrypted = {}
+    local values = {}
+
+    -- Extract all numbers from the encrypted string
     for num in encStr:gmatch("!(%d+)") do
-        local charCode = tonumber(num) - (#decrypted + 1) % 5 -- Reverse shift
+        table.insert(values, tonumber(num))
+    end
+
+    local shiftKey = values[1] -- The first number is the shift key
+
+    for i = 2, #values do -- Start from index 2 (skip shift key)
+        local charCode = values[i] - shiftKey -- Reverse shift
         table.insert(decrypted, string.char(charCode))
     end
+
     return table.concat(decrypted)
 end
 
