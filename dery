@@ -5,23 +5,25 @@ return function(input)
         error("Invalid format: Decryption key or shift missing")
     end
 
-    -- Reconstruct decryption mapping
+    -- Reconstruct decryption map
     local decryptMap = {}
     for i = 1, #key, 2 do
         decryptMap[key:sub(i + 1, i + 1)] = key:sub(i, i)
     end
 
-    -- Decrypt the text with shift reversal
+    -- Decrypt the text
     local result = {}
     for i = 1, #encrypted do
         local char = encrypted:sub(i, i)
-        local originalChar = decryptMap[char] or char -- Reverse encryption map
-        table.insert(result, string.char(((originalChar:byte() - shift) % 256))) -- Reverse shift
+        local originalChar = decryptMap[char] or char -- Reverse map
+        local shiftedByte = originalChar:byte() - shift
+        if shiftedByte < 32 then shiftedByte = ((shiftedByte + 95) % 95) + 32 end -- Keep in printable range
+        table.insert(result, string.char(shiftedByte)) -- Reverse shift
     end
 
     local decryptedString = table.concat(result)
 
-    -- Validate decrypted code before execution
+    -- Execute decrypted code
     local chunk, err = loadstring(decryptedString)
     if not chunk then
         error("Decryption failed: " .. err)
