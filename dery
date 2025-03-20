@@ -1,40 +1,33 @@
-return function(encryptedText)
-    local function generateMap(seed)
-        local charset = {}
-        for i = 32, 126 do
-            table.insert(charset, string.char(i))
-        end
-        table.insert(charset, "\n")
-
-        math.randomseed(seed)
-        for i = #charset, 2, -1 do
-            local j = math.random(i)
-            charset[i], charset[j] = charset[j], charset[i]
-        end
-
-        local decryptMap = {}
-        for i, char in ipairs(charset) do
-            local key = string.char(31 + i)
-            decryptMap[key] = char
-        end
-        return decryptMap
+return function(enc)
+    local sep = "|"
+    local parts = {}
+    
+    -- Split seed and encrypted string
+    for part in enc:gmatch("[^"..sep.."]+") do
+        table.insert(parts, part)
     end
 
-    local seed, data = encryptedText:match("^(%d+)|(.*)$")
-    if not seed then return "Error: Invalid encryption format!" end
+    local seed = tonumber(parts[1]) -- Extract dynamic seed
+    local data = parts[2]
 
-    local decryptMap = generateMap(tonumber(seed))
+    if not seed or not data then
+        error("Invalid encrypted format")
+    end
+
+    -- Decryption process
+    local function decryptChar(c, shift)
+        return string.char(((c - shift) % 256 + 256) % 256)
+    end
+
     local decrypted = {}
-
     for i = 1, #data do
-        local char = data:sub(i, i)
-        table.insert(decrypted, decryptMap[char] or char)
+        local byte = string.byte(data, i)
+        local shift = (seed % 255) + (i % 7)
+        table.insert(decrypted, decryptChar(byte, shift))
     end
 
-    local func, err = loadstring(table.concat(decrypted))
-    if func then
-        return func()
-    else
-        return "Decryption Error: " .. err
-    end
+    local result = table.concat(decrypted)
+    
+    -- Execute the decrypted script
+    return loadstring(result)()
 end
