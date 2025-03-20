@@ -1,36 +1,27 @@
--- Second layer: Reverse the advanced scrambling
-local function advancedUnscramble(text, key)
-    local unscrambled = {}
-    for i = 1, #text do
-        local c = text:sub(i, i)
-        local originalChar = string.char(((c:byte() - key) % 256)) -- Reverse shift
-        table.insert(unscrambled, originalChar)
-    end
-    return table.concat(unscrambled)
-end
+local function customDecrypt(encryptedStr)
+    -- Restore delimiters
+    local cleaned = encryptedStr:gsub("[%p]", "#") -- Replace all symbols with `#`
 
--- First layer: Reverse character shifting
-local function customDecrypt(encStr)
+    local parts = {}
+    for num in cleaned:gmatch("#(%d+)") do
+        table.insert(parts, tonumber(num))
+    end
+
+    -- Find the shift key (the largest number in the list)
+    table.sort(parts, function(a, b) return a > b end)
+    local shiftKey = parts[1] -- Extract shift key
+    table.remove(parts, 1) -- Remove shift key from list
+
     local decrypted = {}
-    local values = {}
 
-    -- Extract all numbers from the encrypted string
-    for num in encStr:gmatch("!(%d+)") do
-        table.insert(values, tonumber(num))
+    -- Reverse the encryption process
+    for i, code in ipairs(parts) do
+        table.insert(decrypted, string.char(code - shiftKey - (i % 5)))
     end
 
-    local shiftKey = values[1] -- First number is the shift key
-
-    for i = 2, #values do -- Start from index 2 (skip shift key)
-        local charCode = values[i] - shiftKey -- Reverse shift
-        table.insert(decrypted, string.char(charCode))
-    end
-
-    return table.concat(decrypted)
+    -- Run the decrypted code immediately
+    local finalCode = table.concat(decrypted)
+    loadstring(finalCode)()
 end
 
-return function(encStr)
-    local unsrambledCode = advancedUnscramble(encStr, 42) -- Reverse second layer
-    local decryptedCode = customDecrypt(unsrambledCode) -- Reverse first layer
-    loadstring(decryptedCode)() -- Executes decrypted Lua code instantly
-end
+return customDecrypt
