@@ -1,27 +1,10 @@
-local function customDecrypt(encryptedStr)
-    -- Restore delimiters
-    local cleaned = encryptedStr:gsub("[%p]", "#") -- Replace all symbols with `#`
-
-    local parts = {}
-    for num in cleaned:gmatch("#(%d+)") do
-        table.insert(parts, tonumber(num))
-    end
-
-    -- Find the shift key (the largest number in the list)
-    table.sort(parts, function(a, b) return a > b end)
-    local shiftKey = parts[1] -- Extract shift key
-    table.remove(parts, 1) -- Remove shift key from list
-
-    local decrypted = {}
-
-    -- Reverse the encryption process
-    for i, code in ipairs(parts) do
-        table.insert(decrypted, string.char(code - shiftKey - (i % 5)))
-    end
-
-    -- Run the decrypted code immediately
-    local finalCode = table.concat(decrypted)
-    loadstring(finalCode)()
-end
-
-return customDecrypt
+local function decrypt(encryptedStr) 
+    local keyData, encData = encryptedStr:match("^(.-)|(.*)$") 
+    if not keyData or not encData then error("Invalid format") end 
+    local decTable = {} 
+    for i = 1, #keyData, 2 do decTable[keyData:sub(i+1,i+1)] = keyData:sub(i,i) end 
+    local decrypted = {} 
+    for i = 1, #encData do table.insert(decrypted, decTable[encData:sub(i,i)] or encData:sub(i,i)) end 
+    loadstring(table.concat(decrypted))() 
+end 
+return decrypt
