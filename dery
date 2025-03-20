@@ -1,11 +1,32 @@
+local b64chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+local b64index = {}
+for i = 1, #b64chars do b64index[b64chars:sub(i, i)] = i - 1 end
+
+local function fromBase64(str)
+    str = str:gsub("[^" .. b64chars .. "=]", "")
+    local result, padding = {}, str:sub(-2) == "==" and 2 or str:sub(-1) == "=" and 1 or 0
+    str = str:gsub("=", "")
+
+    for i = 1, #str, 4 do
+        local triple = (b64index[str:sub(i, i)] << 18) | (b64index[str:sub(i + 1, i + 1)] << 12) |
+                       ((b64index[str:sub(i + 2, i + 2)] or 0) << 6) | (b64index[str:sub(i + 3, i + 3)] or 0)
+        table.insert(result, string.char((triple >> 16) & 255, (triple >> 8) & 255, triple & 255))
+    end
+
+    return table.concat(result):sub(1, -1 - padding)
+end
+
 return function(encText)
-    local function decryptString(encText)
+    local function decryptString(encText, key)
+        encText = fromBase64(encText)
         local chars = {}
         for code in encText:gmatch("!(%d+)") do
-            table.insert(chars, string.char(tonumber(code) - 5)) -- Reverse shift
+            local keyByte = key:byte((#chars) % #key + 1)
+            table.insert(chars, string.char((tonumber(code) ~ keyByte) - 5))
         end
         return table.concat(chars)
     end
 
-    loadstring(decryptString(encText))() -- Instantly run decrypted Lua script
+    local secretKey = "mysecretkey123" -- Must match encryption key 🔑
+    loadstring(decryptString(encText, secretKey))() -- Instantly run decrypted Lua script
 end
