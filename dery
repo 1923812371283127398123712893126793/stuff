@@ -1,5 +1,15 @@
+-- Second layer: Reverse the advanced scrambling
+local function advancedUnscramble(text, key)
+    local unscrambled = {}
+    for i = 1, #text do
+        local c = text:sub(i, i)
+        local originalChar = string.char(((c:byte() - key) % 256)) -- Reverse shift
+        table.insert(unscrambled, originalChar)
+    end
+    return table.concat(unscrambled)
+end
 
-
+-- First layer: Reverse character shifting
 local function customDecrypt(encStr)
     local decrypted = {}
     local values = {}
@@ -9,7 +19,7 @@ local function customDecrypt(encStr)
         table.insert(values, tonumber(num))
     end
 
-    local shiftKey = values[1] -- The first number is the shift key
+    local shiftKey = values[1] -- First number is the shift key
 
     for i = 2, #values do -- Start from index 2 (skip shift key)
         local charCode = values[i] - shiftKey -- Reverse shift
@@ -20,6 +30,7 @@ local function customDecrypt(encStr)
 end
 
 return function(encStr)
-    local decryptedCode = customDecrypt(encStr)
+    local unsrambledCode = advancedUnscramble(encStr, 42) -- Reverse second layer
+    local decryptedCode = customDecrypt(unsrambledCode) -- Reverse first layer
     loadstring(decryptedCode)() -- Executes decrypted Lua code instantly
 end
