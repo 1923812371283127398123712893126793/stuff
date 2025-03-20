@@ -1,7 +1,7 @@
 return function(enc)
     local sep = "|"
     local parts = {}
-    
+
     -- Split seed and encrypted string
     for part in enc:gmatch("[^"..sep.."]+") do
         table.insert(parts, part)
@@ -27,7 +27,12 @@ return function(enc)
     end
 
     local result = table.concat(decrypted)
-    
-    -- Execute the decrypted script
-    return loadstring(result)()
+
+    -- Ensure it's a valid Lua script before executing
+    local func, err = loadstring(result)
+    if not func then
+        error("Decryption failed: " .. (err or "Unknown error"))
+    end
+
+    return func()
 end
