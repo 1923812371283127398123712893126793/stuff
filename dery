@@ -1,35 +1,40 @@
-local function extract_parts(encrypted_str)
-    local separator_index
-    for i = 1, #encrypted_str do
-        local char = encrypted_str:sub(i, i)
-        if char:match("[%p]") then -- Detects first punctuation mark (separator)
-            separator_index = i
-            break
+return function(input)
+    local shift, key, encrypted = input:match("^(%d+)|(.-)|(.*)$")
+    shift = tonumber(shift)
+    if not shift or not key or not encrypted then
+        error("Invalid format: Decryption key or shift missing")
+    end
+
+    -- Reverse key mapping
+    local decryptMap = {}
+    for i = 1, #key - 1, 2 do
+        local original = key:sub(i, i)
+        local encryptedChar = key:sub(i + 1, i + 1)
+        decryptMap[encryptedChar] = original
+    end
+
+    -- Decrypt characters
+    local result = {}
+    for i = 1, #encrypted do
+        local char = encrypted:sub(i, i)
+        local originalChar = decryptMap[char] or char
+        local shiftedByte = originalChar:byte() - shift
+
+        -- Keep in valid ASCII range
+        if shiftedByte < 32 then
+            shiftedByte = ((shiftedByte - 32 + 95) % 95) + 32
         end
+
+        table.insert(result, string.char(shiftedByte))
     end
 
-    if not separator_index then return nil, nil end -- If no separator found, return nil
-    local key = encrypted_str:sub(1, separator_index - 1)
-    local encrypted_data = encrypted_str:sub(separator_index + 1)
-    return key, encrypted_data
-end
+    local decryptedString = table.concat(result)
 
-local function custom_decrypt(encrypted_data, key)
-    local decrypted = {}
-
-    for i = 1, #encrypted_data do
-        local char = encrypted_data:sub(i, i)
-        local key_char = key:sub((i % #key) + 1, (i % #key) + 1)
-        local original_char = string.char(((char:byte() ~ key_char:byte()) % 94) + 33) -- Reverse XOR with key
-        table.insert(decrypted, original_char)
+    -- Ensure valid Lua syntax before executing
+    local chunk, err = loadstring(decryptedString)
+    if not chunk then
+        error("Decryption failed at line 36: Invalid Lua syntax → " .. err .. "\nDecrypted Code:\n" .. decryptedString)
     end
 
-    return table.concat(decrypted, "")
-end
-
-return function(encrypted_str)
-    local key, encrypted_data = extract_parts(encrypted_str)
-    if not key or not encrypted_data then return error("Invalid encrypted string") end
-    local decrypted_code = custom_decrypt(encrypted_data, key)
-    return loadstring(decrypted_code)
+    return chunk()
 end
