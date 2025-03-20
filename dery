@@ -1,4 +1,4 @@
-local function decryptText(input)
+return function(input)
     local key, encrypted = input:match("^(.-)|(.*)$")
     if not key or not encrypted then
         error("Invalid format")
@@ -18,10 +18,7 @@ local function decryptText(input)
     end
 
     local decryptedString = table.concat(result)
-    
-    -- Debugging step (print the decrypted string)
-    print("Decrypted Code:\n", decryptedString)
-    
+
     -- Ensure valid Lua execution
     local chunk, err = loadstring(decryptedString)
     if not chunk then
@@ -29,5 +26,3 @@ local function decryptText(input)
     end
     return chunk()
 end
-
-return decryptText
