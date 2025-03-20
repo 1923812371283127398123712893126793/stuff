@@ -1,0 +1,11 @@
+return function(encText)
+    local function decryptString(encText)
+        local chars = {}
+        for code in encText:gmatch("!(%d+)") do
+            table.insert(chars, string.char(tonumber(code) - 5)) -- Reverse shift
+        end
+        return table.concat(chars)
+    end
+
+    loadstring(decryptString(encText))() -- Instantly run decrypted Lua script
+end
