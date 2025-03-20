@@ -1,25 +1,27 @@
 return function(input)
-    local key, encrypted = input:match("^(.-)|(.*)$")
-    if not key or not encrypted then
-        error("Invalid format")
+    local shift, key, encrypted = input:match("^(%d+)|(.-)|(.*)$")
+    shift = tonumber(shift)
+    if not shift or not key or not encrypted then
+        error("Invalid format: Decryption key or shift missing")
     end
 
-    -- Rebuild decryption map
+    -- Reconstruct decryption mapping
     local decryptMap = {}
     for i = 1, #key, 2 do
         decryptMap[key:sub(i + 1, i + 1)] = key:sub(i, i)
     end
 
-    -- Decrypt the text
+    -- Decrypt the text with shift reversal
     local result = {}
     for i = 1, #encrypted do
         local char = encrypted:sub(i, i)
-        table.insert(result, decryptMap[char] or char)
+        local originalChar = decryptMap[char] or char -- Reverse encryption map
+        table.insert(result, string.char(((originalChar:byte() - shift) % 256))) -- Reverse shift
     end
 
     local decryptedString = table.concat(result)
 
-    -- Ensure valid Lua execution
+    -- Validate decrypted code before execution
     local chunk, err = loadstring(decryptedString)
     if not chunk then
         error("Decryption failed: " .. err)
