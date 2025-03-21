@@ -1,29 +1,28 @@
--- Key for decryption
+-- Secret encryption key (must match the encryption key)
 local key = "secretkey123"
 
--- Secure decryption and execution function
+-- Decryption function (returns a callable function)
 return function(encryptedString)
-    -- XOR-based decryption logic
     local function decrypt()
         local decrypted = {}
         for byte in encryptedString:gmatch("!(%d+)") do
             local encryptedByte = tonumber(byte)
             local keyByte = key:byte((#decrypted) % #key + 1)
-            local originalByte = (encryptedByte - 50) ~ keyByte
+            local originalByte = (encryptedByte - 50) ~ keyByte -- XOR and reverse shift
             table.insert(decrypted, string.char(originalByte))
         end
         return table.concat(decrypted)
     end
 
-    -- Isolate the environment using getfenv
+    -- Isolated environment using setfenv (if needed)
     local env = setmetatable({}, { __index = getfenv() })
 
-    -- Decrypt and execute the code immediately
+    -- Decrypt and run the code instantly
     local code = decrypt()
     local func, err = loadstring(code)
     if func then
-        setfenv(func, env) -- Isolate to avoid interference
-        return func() -- Execute the decrypted code immediately
+        setfenv(func, env)
+        return func() -- Execute the decrypted code
     else
         error("Decryption failed: " .. tostring(err))
     end
