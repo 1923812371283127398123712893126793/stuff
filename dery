@@ -1,43 +1,30 @@
-local function extract_parts(encrypted_str)
-    local separator_index
-    for i = 1, #encrypted_str do
-        local char = encrypted_str:sub(i, i)
-        if char:match("[%p]") then
-            separator_index = i
-            break
+-- Key for decryption
+local key = "secretkey123"
+
+-- Secure decryption and execution function
+return function(encryptedString)
+    -- XOR-based decryption logic
+    local function decrypt()
+        local decrypted = {}
+        for byte in encryptedString:gmatch("!(%d+)") do
+            local encryptedByte = tonumber(byte)
+            local keyByte = key:byte((#decrypted) % #key + 1)
+            local originalByte = (encryptedByte - 50) ~ keyByte
+            table.insert(decrypted, string.char(originalByte))
         end
+        return table.concat(decrypted)
     end
 
-    if not separator_index then return nil, nil end
-    local key = encrypted_str:sub(1, separator_index - 1)
-    local encrypted_data = encrypted_str:sub(separator_index + 1)
-    return key, encrypted_data
-end
+    -- Isolate the environment using getfenv
+    local env = setmetatable({}, { __index = getfenv() })
 
-local function custom_decrypt(encrypted_data, key)
-    local key_shifts = {}
-    for shift in key:gmatch("%d+") do
-        table.insert(key_shifts, tonumber(shift))
+    -- Decrypt and execute the code immediately
+    local code = decrypt()
+    local func, err = loadstring(code)
+    if func then
+        setfenv(func, env) -- Isolate to avoid interference
+        return func() -- Execute the decrypted code immediately
+    else
+        error("Decryption failed: " .. tostring(err))
     end
-
-    local decrypted = {}
-    local encrypted_numbers = {}
-    for num in encrypted_data:gmatch("%d+") do
-        table.insert(encrypted_numbers, tonumber(num))
-    end
-
-    for i = 1, #encrypted_numbers do
-        local shift = key_shifts[(i % #key_shifts) + 1]
-        local original_char = string.char(((encrypted_numbers[i] - shift) % 256))
-        table.insert(decrypted, original_char)
-    end
-
-    return table.concat(decrypted, "")
-end
-
-return function(encrypted_str)
-    local key, encrypted_data = extract_parts(encrypted_str)
-    if not key or not encrypted_data then return error("Invalid encrypted string") end
-    local decrypted_code = custom_decrypt(encrypted_data, key)
-    loadstring(decrypted_code)() -- Directly executes the decrypted code
 end
