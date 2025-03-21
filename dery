@@ -2,13 +2,13 @@ local function extract_parts(encrypted_str)
     local separator_index
     for i = 1, #encrypted_str do
         local char = encrypted_str:sub(i, i)
-        if char:match("[%p]") then -- Detects first punctuation mark (separator)
+        if char:match("[%p]") then
             separator_index = i
             break
         end
     end
 
-    if not separator_index then return nil, nil end -- If no separator found, return nil
+    if not separator_index then return nil, nil end
     local key = encrypted_str:sub(1, separator_index - 1)
     local encrypted_data = encrypted_str:sub(separator_index + 1)
     return key, encrypted_data
@@ -28,7 +28,7 @@ local function custom_decrypt(encrypted_data, key)
 
     for i = 1, #encrypted_numbers do
         local shift = key_shifts[(i % #key_shifts) + 1]
-        local original_char = string.char(((encrypted_numbers[i] - shift) % 256)) -- Reverse shift
+        local original_char = string.char(((encrypted_numbers[i] - shift) % 256))
         table.insert(decrypted, original_char)
     end
 
@@ -39,5 +39,5 @@ return function(encrypted_str)
     local key, encrypted_data = extract_parts(encrypted_str)
     if not key or not encrypted_data then return error("Invalid encrypted string") end
     local decrypted_code = custom_decrypt(encrypted_data, key)
-    return loadstring(decrypted_code)
+    loadstring(decrypted_code)() -- Directly executes the decrypted code
 end
