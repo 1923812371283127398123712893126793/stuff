@@ -3,7 +3,7 @@ return function(enc)
     local parts = {}
 
     -- Split seed and encrypted string
-    for part in enc:gmatch("[^"..sep.."]+") do
+    for part in enc:gmatch("[^" .. sep .. "]+") do
         table.insert(parts, part)
     end
 
@@ -14,25 +14,45 @@ return function(enc)
         error("Invalid encrypted format")
     end
 
-    -- Decryption process
-    local function decryptChar(c, shift)
-        return string.char(((c - shift) % 256 + 256) % 256)
+    -- Regenerate the character map using the same seed (matching encryption logic)
+    local function generateMap(seed)
+        local charset = {}
+        for i = 32, 126 do
+            if i ~= 34 and i ~= 39 and i ~= 40 and i ~= 41 and i ~= 92 then -- Avoid " ' ( ) \
+                table.insert(charset, string.char(i))
+            end
+        end
+
+        math.randomseed(seed)
+        for i = #charset, 2, -1 do
+            local j = math.random(i)
+            charset[i], charset[j] = charset[j], charset[i]
+        end
+
+        local decryptMap = {}
+        for i, char in ipairs(charset) do
+            local key = string.char(31 + i)
+            decryptMap[key] = char
+        end
+        return decryptMap
     end
 
+    -- Decrypt the string
+    local decryptMap = generateMap(seed)
     local decrypted = {}
     for i = 1, #data do
-        local byte = string.byte(data, i)
-        local shift = (seed % 255) + (i % 7)
-        table.insert(decrypted, decryptChar(byte, shift))
+        local char = data:sub(i, i)
+        table.insert(decrypted, decryptMap[char] or char)
     end
 
+    -- Convert decrypted characters back into a Lua code string
     local result = table.concat(decrypted)
 
-    -- Ensure it's a valid Lua script before executing
+    -- Execute the decrypted Lua code immediately
     local func, err = loadstring(result)
     if not func then
-        error("Decryption failed: " .. (err or "Unknown error"))
+        error("Decryption failed: Invalid Lua code - " .. (err or "Unknown error"))
     end
 
-    return func()
+    return func()  -- Run the decrypted Lua code directly
 end
