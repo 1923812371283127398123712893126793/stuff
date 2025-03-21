@@ -1,29 +1,27 @@
--- Secret encryption key (must match the encryption key)
-local key = "secretkey123"
-
--- Decryption function (returns a callable function)
-return function(encryptedString)
-    local function decrypt()
-        local decrypted = {}
-        for byte in encryptedString:gmatch("!(%d+)") do
-            local encryptedByte = tonumber(byte)
-            local keyByte = key:byte((#decrypted) % #key + 1)
-            local originalByte = (encryptedByte - 50) ~ keyByte -- XOR and reverse shift
-            table.insert(decrypted, string.char(originalByte))
-        end
-        return table.concat(decrypted)
+return function(data)
+    local seed, map_str, encrypted_str = data:match("^(%d+)::SecureSec::(.-)::SecureSec::(.+)$")
+    
+    if not seed or not map_str or not encrypted_str then
+        error("Invalid encrypted data format")
     end
 
-    -- Isolated environment using setfenv (if needed)
-    local env = setmetatable({}, { __index = getfenv() })
+    seed = tonumber(seed)
+    math.randomseed(seed) -- Set the seed based on timestamp
 
-    -- Decrypt and run the code instantly
-    local code = decrypt()
-    local func, err = loadstring(code)
-    if func then
-        setfenv(func, env)
-        return func() -- Execute the decrypted code
-    else
-        error("Decryption failed: " .. tostring(err))
+    -- Convert map string back into table
+    local map = {}
+    for num in map_str:gmatch("%d+") do
+        table.insert(map, tonumber(num))
     end
+
+    -- Convert encrypted string back into ASCII and decrypt using the map
+    local decrypted = {}
+    local index = 1
+    for num in encrypted_str:gmatch("%d+") do
+        table.insert(decrypted, string.char(tonumber(num) - map[index]))
+        index = index + 1
+    end
+
+    local decrypted_script = table.concat(decrypted)
+    return loadstring(decrypted_script) -- Execute the decrypted script
 end
