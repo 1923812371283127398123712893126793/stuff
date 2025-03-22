@@ -34,7 +34,10 @@ return function(encryptedString)
             error("Decryption failed: Invalid character mapping")
         end
         
-        local originalChar = ((charIndex - 1 - (map[i] * 3)) % 256)
+        -- Fix: Ensure charIndex doesn't go negative
+        local originalChar = (charIndex - 1 - (map[i] * 3)) % 256
+        if originalChar < 0 then originalChar = originalChar + 256 end
+        
         table.insert(decrypted, string.char(originalChar))
     end
     
