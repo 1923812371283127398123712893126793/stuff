@@ -1,24 +1,24 @@
 return function(encryptedString)
     local pattern = ":(%d+)::SecureSec::([^:]+)::(.+)"
     local seed, mapData, encryptedData = encryptedString:match(pattern)
-    
+
     if not seed or not mapData or not encryptedData then
         error("Invalid encrypted string format")
     end
-    
+
     seed = tonumber(seed)
     math.randomseed(seed) -- Use the same seed as encryption
-    
+
     local map = {}
     for num in mapData:gmatch("(%d+)!?") do
         table.insert(map, tonumber(num))
     end
-    
+
     local charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
     local charsetLen = #charset
     local decrypted = {}
     local encryptedChars = {}
-    
+
     for char in encryptedData:gmatch("([^,]+),?") do
         table.insert(encryptedChars, char)
     end
@@ -26,21 +26,29 @@ return function(encryptedString)
     if #encryptedChars ~= #map then
         error("Decryption failed: Map mismatch")
     end
-    
+
     for i = 1, #encryptedChars do
         local encSymbol = encryptedChars[i]
         local charIndex = charset:find(encSymbol, 1, true)
         if not charIndex then
             error("Decryption failed: Invalid character mapping")
         end
-        
-        -- Fix: Ensure charIndex doesn't go negative
+
+        -- Reverse the encryption process
         local originalChar = (charIndex - 1 - (map[i] * 3)) % 256
         if originalChar < 0 then originalChar = originalChar + 256 end
-        
+
         table.insert(decrypted, string.char(originalChar))
     end
-    
+
     local decryptedCode = table.concat(decrypted)
-    return loadstring(decryptedCode) -- Execute decrypted Lua script
+    
+    -- Debugging: Print decrypted code
+    print("Decrypted Code:\n" .. decryptedCode)
+
+    -- Execute the decrypted code
+    local success, err = pcall(function() loadstring(decryptedCode)() end)
+    if not success then
+        error("Execution failed: " .. tostring(err))
+    end
 end
