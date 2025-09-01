@@ -1,0 +1,1433 @@
+--!native
+--!optimize 2
+
+-- preamble
+-- u need hookfunction, getconnections, getupvalues, getsenv, getscriptclosure, require
+-- hookfunction often crashes on my executor of choice so i dont use it when its not needed
+-- tailored for improving quality of life for veteran/competetive players instead of bulk usage by farmers
+-- open source because its the best way to prevent malicious and abusive behavior
+
+-- conventions
+-- universal functions not closely related to the current game should be declared like the following
+--[[
+local function functionName(...)
+
+end
+]]--
+-- when i refer to something as a module i mean a table within the main PS99 table (eg.: PS99.AutoTap) that contains resources and a method to toggle the module (eg.: PS99.AutoTap:Toggle(...)) or do something within the module using its resources (eg.: PS99.AntiAntiBot:HasLoggedEvent(...))
+-- modules should be toggled with a PS99.ModuleName:Toggle(boolean) function within the module
+-- toggle functions or other functions closely related to the module should use : to utilize resources within the modules table like PS99.AntiAntiBot:Click(...) or PS99.AntiAntiBot:HasLoggedEvent(...)
+-- helper functions that dont make use of any modules resources should be within the PS99 table and be called using . like PS99.UnlockEgg(...)
+-- modules should be tables within the PS99 table, so they can have their own resources and functions table
+-- when toggling a module you should always create a new thread using task.spawn or coroutine.wrap, whether its for enabling or disabling the module
+-- module names should be PascalCase and variables should be camelCase
+-- functions that claim rewards may introduce the REWARDS_CHECK_DELAY constant into the task.wait()
+-- call remote functions, events and add OnClientEvent connections via the network modulescript so its easy to fix server-client communication in case they start hashing remotes
+
+-- when creating a module make sure to create its table within the main SAB table like so before making the toggle function or any helper functions:
+--[[
+SAB.ModuleName = {
+    -- optional additional resources
+}
+-- optional module initiation logic
+function SAB.ModuleName:Init()
+    if self.initated then
+        return
+    end
+    self.initated = true
+end
+]]--
+
+-- the toggle function of modules that run every frame when toggled should be built off the following template that prevents race conditions
+--[[
+function SAB.ModuleName:Toggle(boolean)
+    if self.Init then
+        self:Init()
+    end
+    if boolean and not self.isRunning then
+        self.enabled = true
+    elseif not boolean and self.enabled then
+        self.enabled = false
+        return
+    end
+    self.isRunning = true
+    while task.wait() and self.enabled do
+        
+        --MODULE FUNCTIONALITY CODE HERE
+        
+    end
+    self.isRunning = false
+end
+]]--
+
+-- guis
+-- you can add guis very easily using example module toggles at the end of the file
+-- a generic gui library button callback that disables hatch animation would look something like
+--[[
+Callback = function()
+    task.spawn(function()
+        SAB.DisableHatchAnimation:Toggle(true)
+    end)
+end
+]]--
+-- you can use different guis at the same time because the SAB table becomes an exploit global within the getgenv() table
+-- guis should not have any game functionality within them, just wrapping the functions from this source code
+
+-- contributions
+-- these conventions are not die-hard, its just my personal coding style
+-- feel free to contribute by sending a dm with your proposition and code to discord user id <@454658721641922570> (paste the whole thing into chat to see user)
+-- it may be made into a github repository in the future
+
+while not game:IsLoaded() do
+    task.wait()
+end
+
+local Logger = {
+    showDebugPrints = false,
+    showWarnings = false,
+}
+function Logger.print(...)
+    if Logger.showDebugPrints then
+       print(...)
+    end
+end
+function Logger.warn(...)
+    if Logger.showWarnings then
+        warn(...)
+    end
+end
+-- hack for clean error stack trace, are we ever gonna need this realistically
+Logger.error = newcclosure(function(...)
+    local mergedErrorMessage = table.concat({...}," ")
+    error(mergedErrorMessage,2)
+end)
+
+local plrs = game:GetService("Players")
+local ProximityPromptService = cloneref(game:GetService("ProximityPromptService"))
+local rs = game:GetService("ReplicatedStorage")
+local animalController = require(rs.Controllers.AnimalController)
+local httpService = cloneref(game:GetService("HttpService"))
+local plotController = require(rs.Controllers.PlotController)
+local plr = plrs.LocalPlayer
+local Animals = require(rs.Datas.Animals)
+local Mutations = require(rs.Datas.Mutations)
+
+local MAX_PLAYER_SPEED = 42
+
+local function executorPatches()
+    if not getupvalue then
+        getgenv().getupvalue = newcclosure(function(f,i)
+            return getupvalues(f)[i] or error("upvalue index out of range",2)
+        end)
+    end
+end
+
+executorPatches()
+
+local function removeCycles(tbl, seen)
+	seen = seen or {}
+
+	-- If we've already seen this table, it's a cycle
+	if seen[tbl] then
+		return true
+	end
+
+	-- Mark this table as seen
+	seen[tbl] = true
+
+	for key, value in pairs(tbl) do
+		if typeof(value) == "table" then
+			-- If the nested table is already seen, it's a cycle
+			if seen[value] then
+				tbl[key] = nil -- remove the cyclic reference
+			else
+				local isCycle = removeCycles(value, seen)
+				if isCycle then
+					tbl[key] = nil
+				end
+			end
+		end
+	end
+
+	-- After processing, allow this table to be reused in other branches (optional)
+	seen[tbl] = nil
+
+	return false
+end
+local function copyTableNoCyclicReferences(t)
+    removeCycles(t)
+    setclipboard(httpService:JSONEncode(t))
+end
+
+local SAB = {}
+
+function SAB.GetRoadAnimals()
+    return animalController:GetAnimals()
+end
+
+function SAB.GetPlots()
+    if not _plots then
+        getgenv()._plots = getupvalue(plotController.Start,2)
+    end
+    return _plots
+end
+
+function SAB.GetPlot(UID)
+    return (UID and SAB.GetPlots()[UID]) or plotController:GetMyPlot()
+end
+
+function SAB.GetPlotAnimals(plot)
+    plot = plot or SAB.GetPlot()
+    local _,b = plot.Channel:Get("AnimalList")
+    return b.AnimalList
+end
+
+function SAB.GetPlotModel(plotTable)
+    plotTable = plotTable or SAB.GetPlot()
+    return plotTable.PlotModel
+end
+
+local function firetouchinterest_(otherPart)
+    pcall(function()
+        for i=1,0,-1 do
+            firetouchinterest(otherPart,plr.Character.HumanoidRootPart,i)
+        end
+    end)
+end
+
+function SAB.BlockPlot()
+    local touchTransmitterInstance = SAB.GetPlotModel().Purchases.PlotBlock.Hitbox:FindFirstChildWhichIsA("TouchTransmitter")
+    if not touchTransmitterInstance then
+        return
+    end
+    local transmitterParent = touchTransmitterInstance.Parent
+    firetouchinterest_(transmitterParent)
+end
+
+function SAB.IsPlotOpen(plotTable)
+    local plotModel = (plotTable and plotTable.PlotModel) or SAB.GetPlotModel()
+    local s,r = pcall(function()
+        return plotModel.Laser.Model["structure base home"].Transparency == 1
+    end)
+    if s then
+        return r
+    end
+end
+
+local function distance(pos1,pos2)
+    pos2 = pos2 or plr.Character.HumanoidRootPart.Position
+    return (pos1-pos2).Magnitude
+end
+
+local function distanceSq(pos1,pos2)
+    pos2 = pos2 or plr.Character.HumanoidRootPart.Position
+    local dx = pos1.X - pos2.X
+    local dy = pos1.Y - pos2.Y
+    local dz = pos1.Z - pos2.Z
+    return dx*dx + dy*dy + dz*dz
+end
+
+function SAB.GetMaxSpeed()
+    local l_Tool_1 = plr.Character:FindFirstChildOfClass("Tool")
+    local speedMod = 1
+    if l_Tool_1 and l_Tool_1:GetAttribute("SpeedModifier") then
+        speedMod *= l_Tool_1:GetAttribute("SpeedModifier")
+    end
+    if SAB.IsStealing() then
+        speedMod *= 0.6
+    end
+    return MAX_PLAYER_SPEED*speedMod
+end
+
+-- add different horizontal and vertical tweening logic
+local function tweenCFrame(targetCFrame,speed)
+    local TweenService = game:GetService("TweenService")
+    local player = game.Players.LocalPlayer
+    local character = player.Character or player.CharacterAdded:Wait()
+    local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+    local humanoid = character:WaitForChild("Humanoid")
+
+    local tweenTime = distance(targetCFrame.Position,humanoidRootPart.Position) / (speed or SAB.GetMaxSpeed())
+
+    local tweenInfo = TweenInfo.new(
+        tweenTime,
+        Enum.EasingStyle.Linear,
+        Enum.EasingDirection.Out
+    )
+
+    local tween = TweenService:Create(humanoidRootPart, tweenInfo, {CFrame = targetCFrame})
+
+    local tweenFinished
+    tween.Completed:Once(function(playbackState)
+        tweenFinished = true
+    end)
+
+    tween:Play()
+
+    while not tweenFinished do
+        task.wait()
+    end
+
+end
+
+SAB.AutoBlockPlot = {
+    MAX_PLOT_BLOCK_DISTANCE = 7,
+    BLOCK_DELAY = 0.1
+}
+function SAB.AutoBlockPlot:Toggle(boolean)
+    if self.Init then
+        self:Init()
+    end
+    if boolean and not self.isRunning then
+        self.enabled = true
+    elseif not boolean and self.enabled then
+        self.enabled = false
+        return
+    end
+    self.isRunning = true
+    while task.wait() and self.enabled do
+        
+        if not SAB.IsPlotOpen() then
+            continue
+        end
+        
+        local plotHitbox = SAB.GetPlotModel().Purchases.PlotBlock.Hitbox
+
+        if not plotHitbox then
+            continue
+        end
+
+        if distance(plotHitbox.Position) > self.MAX_PLOT_BLOCK_DISTANCE then
+            continue
+        end
+
+        SAB.BlockPlot()
+        task.wait(self.BLOCK_DELAY)
+
+    end
+    self.isRunning = false
+end
+
+function SAB.IsStealing(player)
+    player = player or plr
+    return player:GetAttribute("Stealing")
+end
+
+function SAB.IsAnimalPodiumInstanceTaken(animalPodiumInstance)
+    return animalPodiumInstance.Base.Spawn:FindFirstChild("Attachment")~=nil
+end
+
+SAB.JumpBoost = {
+    BASE_MAX_JUMP_POWER = 125,
+    jumpPower = 125,
+}
+
+function SAB.JumpBoost:GetMaxJumpPower()
+    return (not SAB.IsStealing() and self.BASE_MAX_JUMP_POWER) or self.BASE_MAX_JUMP_POWER*0.6
+end
+
+function SAB.JumpBoost:GetUsableJumpPower()
+    return (SAB.IsStealing() and math.clamp(self.jumpPower,50,self.BASE_MAX_JUMP_POWER*0.6)) or self.jumpPower
+end
+
+function SAB.JumpBoost:SetJumpPower(value)
+    self.jumpPower = value
+end
+
+function SAB.JumpBoost:Toggle(boolean)
+    if self.Init then
+        self:Init()
+    end
+    if boolean and not self.isRunning then
+        self.enabled = true
+    elseif not boolean and self.enabled then
+        self.enabled = false
+        return
+    end
+    self.isRunning = true
+    while task.wait() and self.enabled do
+        
+        pcall(function()
+            plr.Character.Humanoid.UseJumpPower = true
+            plr.Character.Humanoid.JumpPower = self:GetUsableJumpPower()
+        end)
+        
+    end
+    self.isRunning = false
+end
+
+function SAB.GetMutationMultiplier(mutationName)
+    local multi = 1
+    local mutationInfo = Mutations[mutationName]
+    if mutationInfo then
+        multi += mutationInfo.Modifier
+    end
+    return multi
+end
+
+local sharedAnimals = require(rs.Shared.Animals)
+function SAB.GetAnimalPrice(animalName)
+    return sharedAnimals:GetPrice(animalName)
+end
+
+function SAB.GetAnimalGeneration(animalName, mutation, traits)
+    return sharedAnimals:GetGeneration(animalName, mutation, traits, nil) -- last argument is rebirth or multiplier, due to multiplications monotonic nature this can be omitted for comparisons
+end
+
+SAB.AutoClaimBaseCash = {
+    MAX_CLAIM_DISTANCE = 13,
+    CLAIM_DELAY = 0.1
+}
+function SAB.AutoClaimBaseCash:Toggle(boolean)
+    if self.Init then
+        self:Init()
+    end
+    if boolean and not self.isRunning then
+        self.enabled = true
+    elseif not boolean and self.enabled then
+        self.enabled = false
+        return
+    end
+    self.isRunning = true
+    while task.wait() and self.enabled do
+
+        local animalPodiums = SAB.GetPlotModel():FindFirstChild("AnimalPodiums")
+
+        if not animalPodiums then
+            continue
+        end
+
+        for _,v in animalPodiums:GetChildren() do
+            pcall(function()
+                local collectGui = v.Claim.Main.Collect
+                if (collectGui.Offline.Visible or (not collectGui.Collect.Text:find("$0",1,true))) and (distance(v.Claim.Hitbox.Position) < self.MAX_CLAIM_DISTANCE) then
+                    firetouchinterest_(v.Claim.Hitbox)
+                    task.wait(self.CLAIM_DELAY)
+                end
+            end)
+            
+        end
+        
+    end
+    self.isRunning = false
+end
+
+local function resetCharacter()
+    pcall(function()
+        plr.Character.Humanoid.Health = 0
+    end)
+end
+
+SAB.BigPlotTimers = {}
+function SAB.BigPlotTimers:Toggle(boolean)
+    if self.Init then
+        self:Init()
+    end
+    if boolean and not self.isRunning then
+        self.enabled = true
+    elseif not boolean and self.enabled then
+        self.enabled = false
+    end
+    self.isRunning = true
+    while task.wait() and self.enabled do
+        
+        pcall(function()
+            for _,v in workspace.Plots:GetChildren() do
+                v.Purchases.PlotBlock.Main.BillboardGui.AlwaysOnTop = true
+                v.Purchases.PlotBlock.Main.BillboardGui.MaxDistance = 1000
+                v.Purchases.PlotBlock.Main.BillboardGui.Size = UDim2.fromScale(35,50)
+            end
+        end)
+
+    end
+    pcall(function()
+        for _,v in workspace.Plots:GetChildren() do
+            v.Purchases.PlotBlock.Main.BillboardGui.AlwaysOnTop = false
+            v.Purchases.PlotBlock.Main.BillboardGui.MaxDistance = 60
+            v.Purchases.PlotBlock.Main.BillboardGui.Size = UDim2.fromScale(7,10)
+        end
+    end)
+    self.isRunning = false
+end
+
+local function antiAFK()
+    for _,v in getconnections(plr.Idled) do
+        v:Disable()
+    end
+end
+
+function SAB.ConsoleDetectionsBypass()
+    for _,v in getconnections(cloneref(game:GetService("ScriptContext")).Error) do
+        if v.Function and islclosure(v.Function) then
+            Logger.print("error connections disabled")
+            v:Disable()
+        end
+    end
+
+    for _,v in getconnections(cloneref(game:GetService("LogService")).MessageOut) do
+        if v.Function and islclosure(v.Function) then
+            Logger.print("messageout connection disabled")
+            v:Disable()
+        end
+    end
+end
+
+local l_Packages_0 = rs:WaitForChild("Packages");
+local network = require(l_Packages_0.Net);
+local useItemRemote = network:RemoteEvent("UseItem");
+
+SAB.DisableClientDebuffs = {
+    useItemRemoteTrapStrings = {
+        "Bee Attack",
+        "PaintballHitted",
+        "Flashbang",
+        "Trapped",
+        "TurnIntoJelly"
+    },
+    freezeRayConnection = nil
+}
+
+function SAB.DisableClientDebuffs:Toggle(boolean)
+    if boolean then
+        for _,v in getconnections(useItemRemote.OnClientEvent) do
+            if v.Function then
+                local constants = getconstants(v.Function)
+                for _,trapString in self.useItemRemoteTrapStrings do
+                    if table.find(constants,trapString) then
+                        v:Disable()
+                        break
+                    end
+                end
+            end
+        end
+        for _,v in getconnections(network:RemoteEvent("FreezeRay/Escape").OnClientEvent) do
+            if table.find(getconstants(v.Function),"ShowTargets") then
+                v:Disable()
+            end
+        end
+        if not self.freezeRayConnection then
+            self.freezeRayConnection = network:RemoteEvent("FreezeRay/Escape").OnClientEvent:Connect(function()
+                for _=1,10 do
+                    network:RemoteEvent("FreezeRay/Escape"):FireServer()
+                end
+            end)
+        end
+        for i,v in getconnections(network:RemoteEvent("CombatService/ApplyImpulse").OnClientEvent) do
+            v:Disable()
+        end
+        for i,v in getconnections(rs:WaitForChild("Packages").Ragdoll.Ragdoll.OnClientEvent) do
+            v:Disable()
+        end
+        if not self.charAddedConn then
+            self.charAddedConn = plr.CharacterAdded:Connect(function(character)
+                Logger.print("char added")
+                task.wait(1)
+                self:Toggle(true)
+            end)
+        end
+    else
+        if self.charAddedConn then
+            self.charAddedConn:Disconnect()
+            self.charAddedConn = nil
+        end
+        for _,v in getconnections(useItemRemote.OnClientEvent) do
+            v:Enable()
+        end
+        for _,v in getconnections(network:RemoteEvent("FreezeRay/Escape").OnClientEvent) do
+            v:Enable()
+        end
+        if self.freezeRayConnection then
+            self.freezeRayConnection:Disconnect()
+            self.freezeRayConnection = nil
+        end
+        for i,v in getconnections(network:RemoteEvent("CombatService/ApplyImpulse").OnClientEvent) do
+            v:Enable()
+        end
+        for i,v in getconnections(rs:WaitForChild("Packages").Ragdoll.Ragdoll.OnClientEvent) do
+            v:Enable()
+        end
+    end
+end
+
+SAB.ResetBind = {}
+local uis:UserInputService = cloneref(game:GetService("UserInputService"))
+function SAB.ResetBind:Toggle(boolean)
+    if boolean and (not self.conn) then
+        self.conn = uis.InputBegan:Connect(function(input, gameProcessedEvent)
+            if input.KeyCode == Enum.KeyCode.R and (not gameProcessedEvent) then
+                Logger.print("[ResetBind] resetting character")
+                resetCharacter()
+            end
+        end)
+    elseif self.conn then
+        self.conn:Disconnect()
+        self.conn = nil
+    end
+end
+
+local tpService:TeleportService = cloneref(game:GetService("TeleportService"))
+
+SAB.LeaveBind = {}
+function SAB.LeaveBind:Toggle(boolean)
+    if boolean and (not self.conn) then
+        self.conn = uis.InputBegan:Connect(function(input, gameProcessedEvent)
+            if input.KeyCode == Enum.KeyCode.C and (not gameProcessedEvent) then
+                Logger.print("[LeaveBind] Shutting down game")
+                xpcall(function() game:Shutdown() end,function()
+                    plr:Kick()
+                end)
+            end
+        end)
+    elseif self.conn then
+        self.conn:Disconnect()
+        self.conn = nil
+    end
+end
+
+SAB.Animations = {
+    ids = {
+        detach = "rbxassetid://93872845447733", -- desync
+        fly = "rbxassetid://96129344738838", -- fly
+        flybad = "rbxassetid://91133306449431", -- bad elevation
+        hidebad = "rbxassetid://90569241075391", -- bad hide
+        betterhide = "rbxassetid://112084042063926", -- better hide
+        hide = "rbxassetid://122954953446602", -- good hide
+        hide2 = "rbxassetid://123297186701468", -- good hide
+        headwalk = "rbxassetid://83715869445749", -- head walks away
+        hidebad2 = "rbxassetid://101550918205937", -- bad hide
+        hidebad3 = "rbxassetid://100466914056069", -- bad hide
+        hide3 = "rbxassetid://124815959932264", -- hide
+        hide4 = "rbxassetid://109235754498921", -- hide
+    }
+}
+function SAB.Animations:PlayAnimation(animationId)
+    if self.anim then
+        self.anim:Stop()
+        self.anim:Destroy()
+        self.anim = nil
+    end
+    if not animationId then
+        return
+    end
+    local anim = Instance.new("Animation")
+    anim.AnimationId = animationId
+    self.anim = plr.Character.Humanoid:LoadAnimation(anim)
+    self.anim:Play()
+end
+
+local function splitConcatenatedTable(str, sep)
+    local result = {}
+    for part in string.gmatch(str, "([^" .. sep .. "]+)") do
+        table.insert(result, part)
+    end
+    return result
+end
+
+-- returns a pareto optimal set of the given table and values for provided keys
+local function getBestByKeys(pets, keys)
+    local bestPets = {}
+
+    for _, pet in ipairs(pets) do
+        local dominated = false
+
+        -- Compare this pet against every other pet
+        for _, other in ipairs(pets) do
+            if other ~= pet then
+                local betterInAtLeastOne = false
+                local worseInAny = false
+
+                for _, key in ipairs(keys) do
+                    local a, b = pet[key] or -math.huge, other[key] or -math.huge
+                    if b > a then
+                        worseInAny = true
+                    elseif b < a then
+                        betterInAtLeastOne = true
+                    end
+                end
+
+                -- If "other" is >= in all keys and > in at least one → pet is dominated
+                if worseInAny and not betterInAtLeastOne then
+                    dominated = true
+                    break
+                end
+            end
+        end
+
+        if not dominated then
+            table.insert(bestPets, pet)
+        end
+    end
+
+    return bestPets
+end
+local HighlightModeEnum = {
+    Price = 1,
+    Generation = 2,
+    Both = 3
+}
+SAB.HighlightBestPlotAnimals = {
+    lastHighlights = {},
+    lastGuis = {},
+    CHECK_DELAY = 0.25,
+    highlightMode = 3, -- HighlightModeEnum
+    highlightEveryBase = true,
+    excludeOwnBase = true
+}
+
+function SAB.HighlightBestPlotAnimals:GetBestAnimalGuisGlobal()
+    local matchingGuis = {}
+    local animals = {}
+
+    for _,plot in SAB.GetPlots() do
+        if self.excludeOwnBase and plot.UID == SAB.GetPlot().UID then
+            continue
+        end
+        local plotAnimals = SAB.GetPlotAnimals(plot)
+        if not plotAnimals then
+            continue
+        end
+        for podiumIndex,animal in plotAnimals do
+
+            if animal == "Empty" or animal.Steal ~= false then
+                continue
+            end
+
+            local price = SAB.GetAnimalPrice(animal.Index)
+            local generation = SAB.GetAnimalGeneration(animal.Index,animal.Mutation,animal.Traits)
+
+            if price and generation then
+                table.insert(animals,{plotUID = plot.UID, index = podiumIndex, price = price, generation = generation})
+            end
+
+        end
+    end
+
+    if #animals == 0 then
+        return
+    end
+
+    local keysTable = {}
+
+    if (bit32.band(self.highlightMode,HighlightModeEnum.Price)) ~= 0 then
+        table.insert(keysTable,"price")
+    end
+    if (bit32.band(self.highlightMode,HighlightModeEnum.Generation)) ~= 0 then
+        table.insert(keysTable,"generation")
+    end
+
+    local matchingAnimals = getBestByKeys(animals,keysTable)
+
+    if matchingAnimals then
+        for _,v in matchingAnimals do
+            local s,bestAnimalGuiModel = pcall(function() return workspace.Plots[v.plotUID].AnimalPodiums[v.index] end)
+            if not s then
+                continue
+            end
+            local animalGui = bestAnimalGuiModel:FindFirstChild("AnimalOverhead",true)
+            if animalGui then
+                table.insert(matchingGuis,animalGui)
+            end
+        end
+    end
+
+    return matchingGuis
+end
+function SAB.HighlightBestPlotAnimals:GetBestAnimalGuisForPlot(plot)
+
+    local matchingGuis = {}
+    local animals = {}
+
+    local plotAnimals = SAB.GetPlotAnimals(plot)
+    if not plotAnimals then
+        return
+    end
+    for podiumIndex,animal in plotAnimals do
+
+        if animal == "Empty" or animal.Steal ~= false then
+            continue
+        end
+
+        local price = SAB.GetAnimalPrice(animal.Index)
+        local generation = SAB.GetAnimalGeneration(animal.Index,animal.Mutation,animal.Traits)
+
+        if price and generation then
+            table.insert(animals,{index = podiumIndex, price = price, generation = generation})
+        end
+
+    end
+
+    if #animals == 0 then
+        return
+    end
+
+    local keysTable = {}
+    if (bit32.band(self.highlightMode,HighlightModeEnum.Price)) ~= 0 then
+        table.insert(keysTable,"price")
+    end
+    if (bit32.band(self.highlightMode,HighlightModeEnum.Generation)) ~= 0 then
+        table.insert(keysTable,"generation")
+    end
+
+    local matchingAnimals = getBestByKeys(animals,keysTable)
+
+    if matchingAnimals then
+        for _,v in matchingAnimals do
+            local s,bestAnimalGuiModel = pcall(function() return workspace.Plots[plot.UID].AnimalPodiums[v.index] end)
+            if not s then
+                continue
+            end
+            local animalGui = bestAnimalGuiModel:FindFirstChild("AnimalOverhead",true)
+            if animalGui then
+                table.insert(matchingGuis,animalGui)
+            end
+        end
+    end
+
+    return matchingGuis
+end
+function SAB.HighlightBestPlotAnimals:GetBestAnimalModelsGlobal()
+    local animals = {}
+    for _,plotModel in workspace.Plots:GetChildren() do
+        if self.excludeOwnBase and plotModel.Name == SAB.GetPlot().UID then
+            continue
+        end
+        for _,animal in plotModel:GetChildren() do
+            
+            if not Animals[animal.Name] then
+                continue
+            end
+
+            local traits = animal:GetAttribute("Traits")
+            if traits then
+                traits = splitConcatenatedTable(traits,",")
+            end
+
+            local price = SAB.GetAnimalPrice(animal.Name)
+            local generation = SAB.GetAnimalGeneration(animal.Name,animal:GetAttribute("Mutation"),traits)
+
+            if price and generation then
+                table.insert(animals,{model = animal, price = price, generation = generation})
+            end
+        end
+    end
+
+    if #animals == 0 then
+        return
+    end
+
+    local keysTable = {}
+    if (bit32.band(self.highlightMode,HighlightModeEnum.Price)) ~= 0 then
+        table.insert(keysTable,"price")
+    end
+    if (bit32.band(self.highlightMode,HighlightModeEnum.Generation)) ~= 0 then
+        table.insert(keysTable,"generation")
+    end
+
+    local matchingAnimalModels = {}
+
+    for i,v in getBestByKeys(animals,keysTable) do
+        table.insert(matchingAnimalModels,v.model)
+    end
+
+    return matchingAnimalModels
+end
+function SAB.HighlightBestPlotAnimals:GetBestAnimalModelsForPlot(plot)
+    local matchingAnimalModels = {}
+
+    local animals = {}
+    for _,animal in workspace.Plots:FindFirstChild(plot.UID):GetChildren() do
+        
+        if not Animals[animal.Name] then
+            continue
+        end
+
+        local traits = animal:GetAttribute("Traits")
+        if traits then
+            traits = splitConcatenatedTable(traits,",")
+        end
+
+        local price = SAB.GetAnimalPrice(animal.Name)
+        local generation = SAB.GetAnimalGeneration(animal.Name,animal:GetAttribute("Mutation"),traits)
+
+        if price and generation then
+            table.insert(animals,{model = animal, price = price, generation = generation})
+        end
+    end
+
+    if #animals == 0 then
+        return
+    end
+
+    local keysTable = {}
+    if (bit32.band(self.highlightMode,HighlightModeEnum.Price)) ~= 0 then
+        table.insert(keysTable,"price")
+    end
+    if (bit32.band(self.highlightMode,HighlightModeEnum.Generation)) ~= 0 then
+        table.insert(keysTable,"generation")
+    end
+
+    for i,v in getBestByKeys(animals,keysTable) do
+        table.insert(matchingAnimalModels,v.model)
+    end
+
+    return matchingAnimalModels
+end
+function SAB.HighlightBestPlotAnimals:SetHighlightMode(highlightModeEnum)
+    self.highlightMode = highlightModeEnum
+end
+function SAB.HighlightBestPlotAnimals:SetExcludeOwnBase(boolean)
+    self.excludeOwnBase = boolean
+end
+function SAB.HighlightBestPlotAnimals:SetHighlightEveryBase(boolean)
+    self.highlightEveryBase = boolean
+end
+function SAB.HighlightBestPlotAnimals:Toggle(boolean)
+    if self.Init then
+        self:Init()
+    end
+    if boolean and not self.isRunning then
+        self.enabled = true
+    elseif not boolean and self.enabled then
+        self.enabled = false
+        return
+    end
+    self.isRunning = true
+
+    local function setAnimalGuiHuge(animalGui,bool)
+        if bool then
+            animalGui.AlwaysOnTop = true
+            animalGui.MaxDistance = 9999
+            animalGui.Size = UDim2.fromScale(100,35)
+            table.insert(self.lastGuis,animalGui)
+        else
+            animalGui.AlwaysOnTop = false
+            animalGui.MaxDistance = 60
+            animalGui.Size = UDim2.fromScale(15,5)
+        end
+    end
+
+    local function addHighlight(model)
+        local highlight = Instance.new("Highlight")
+        highlight.FillColor = Color3.fromRGB(0,255,0)
+        highlight.OutlineColor = Color3.fromRGB(0,255,0)
+        highlight.Parent = model
+        table.insert(self.lastHighlights,highlight)
+    end
+
+    local function cleanupEverything()
+        for i,v in self.lastHighlights do
+            if v then
+                v:Destroy()
+            end
+        end
+        for i,v in self.lastGuis do
+            setAnimalGuiHuge(v,false)
+        end
+        table.clear(self.lastHighlights)
+        table.clear(self.lastGuis)
+    end
+
+    while task.wait(self.CHECK_DELAY) and self.enabled do
+        
+        cleanupEverything()
+
+        if self.highlightEveryBase then
+            for _,plot in SAB.GetPlots() do
+                if self.excludeOwnBase and plot == SAB.GetPlot() then
+                    continue
+                end
+                local bestAnimalGuisForPlot = self:GetBestAnimalGuisForPlot(plot)
+                if not bestAnimalGuisForPlot then
+                    continue
+                end
+                for i,v in bestAnimalGuisForPlot do
+                    setAnimalGuiHuge(v,true)
+                end
+
+                local bestAnimalModelsForPlot = self:GetBestAnimalModelsForPlot(plot)
+
+                if not bestAnimalModelsForPlot then
+                    continue
+                end
+
+                for i,v in bestAnimalModelsForPlot do
+                    local animalGuiInModel = v:FindFirstChild("AnimalOverhead",true) -- in lucky blocks
+                    if animalGuiInModel then
+                        setAnimalGuiHuge(animalGuiInModel,true)
+                    end
+                    addHighlight(v)
+                end
+
+            end
+        elseif not self.highlightEveryBase then
+            for i,v in self:GetBestAnimalGuisGlobal() do
+                setAnimalGuiHuge(v,true)
+            end
+            for i,v in self:GetBestAnimalModelsGlobal() do
+                local animalGuiInModel = v:FindFirstChild("AnimalOverhead",true) -- in lucky blocks
+                if animalGuiInModel then
+                    setAnimalGuiHuge(animalGuiInModel,true)
+                end
+                addHighlight(v)
+            end
+        end
+
+    end
+
+    cleanupEverything()
+
+    self.isRunning = false
+end
+
+SAB.InstantPrompts = {
+    connection = nil
+}
+function SAB.InstantPrompts:Toggle(boolean)
+    if boolean and not self.connection then
+        self.connection = ProximityPromptService.PromptButtonHoldBegan:Connect(function(prompt)
+            if prompt.HoldDuration > 0 and prompt:GetAttribute("State") ~= "Steal" then
+                fireproximityprompt(prompt)
+            end
+        end)
+    elseif not boolean and self.connection then
+        self.connection:Disconnect()
+        self.connection = nil
+    end
+end
+
+SAB.StealTween = {
+    connection = nil
+}
+function SAB.StealTween:Toggle(boolean)
+    if boolean and not self.connection then
+        self.connection = ProximityPromptService.PromptTriggered:Connect(function(prompt)
+            if prompt:GetAttribute("State") == "Steal" and prompt.Enabled and prompt.HoldDuration > 0 and not SAB.IsStealing() then
+                SAB.TweenBase()
+            end
+        end)
+    elseif not boolean and self.connection then
+        self.connection:Disconnect()
+        self.connection = nil
+    end
+end
+
+SAB.NoClipCamera = {
+    connection = nil
+}
+function SAB.NoClipCamera:Toggle(boolean)
+    if boolean and (not self.connection) then
+        plr.DevCameraOcclusionMode = Enum.DevCameraOcclusionMode.Invisicam
+        self.connection = plr.CharacterAdded:Connect(function(character)
+            plr.DevCameraOcclusionMode = Enum.DevCameraOcclusionMode.Invisicam
+        end)
+    else
+        if self.connection then
+            self.connection:Disconnect()
+            self.connection = nil
+        end
+        plr.DevCameraOcclusionMode = Enum.DevCameraOcclusionMode.Zoom
+    end
+end
+
+function SAB.IsInInventory(itemName)
+    return (plr.Character:FindFirstChild(itemName) or plr.Backpack:FindFirstChild(itemName))~=nil
+end
+
+local function GetClosestPlayerToMouse()
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+    local Camera = workspace.CurrentCamera
+    local Mouse = LocalPlayer:GetMouse()
+    local closestPlayer = nil
+    local shortestDistance = math.huge
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local rootPart = player.Character.HumanoidRootPart
+            local screenPos, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
+            
+            if onScreen then
+                local mousePos = Vector2.new(Mouse.X, Mouse.Y)
+                local screenPos2D = Vector2.new(screenPos.X, screenPos.Y)
+                local distance = (mousePos - screenPos2D).Magnitude
+
+                if distance < shortestDistance then
+                    shortestDistance = distance
+                    closestPlayer = player
+                end
+            end
+        end
+    end
+
+    return closestPlayer
+end
+
+local RunService = game:GetService("RunService")
+
+SAB.TazerSteal = {
+    connection = nil
+}
+
+local function unragdoll()
+    local v45 = plr.Character
+    for _, v47 in pairs(v45:GetDescendants()) do
+        if v47:IsA("Motor6D") then
+            if v47.Part0 and v47.Part1 then
+                local _ = v45:WaitForChild("Humanoid");
+                local v49 = v47.Parent:FindFirstChild("BallSocketConstraint") or v47.Parent:FindFirstChild("HingeConstraint");
+                local l_Attachment_10 = v47.Part0:FindFirstChild("Attachment");
+                local l_Attachment_11 = v47.Part1:FindFirstChild("Attachment");
+                if v49 then
+                    v49:Destroy();
+                end;
+                if l_Attachment_10 then
+                    l_Attachment_10:Destroy();
+                end;
+                if l_Attachment_11 then
+                    l_Attachment_11:Destroy();
+                end;
+                local l_PlayerFromCharacter_3 = game.Players:GetPlayerFromCharacter(v45);
+                v47.Enabled = true;
+            end;
+        end;
+    end;
+end
+
+function SAB.TaserSpeedBoost()
+    local plr = game.Players.LocalPlayer
+    local character = plr.Character or plr.CharacterAdded:Wait()
+    local humanoid = character:WaitForChild("Humanoid")
+    local hrp = character:WaitForChild("HumanoidRootPart")
+    local backpack = plr:WaitForChild("Backpack")
+
+    if not character:FindFirstChild("Taser Gun") and backpack:FindFirstChild("Taser Gun") then
+        pcall(function()
+            humanoid:EquipTool(backpack["Taser Gun"])
+        end)
+    end
+
+    local tweenSpeed = 150
+
+    network:RemoteEvent("UseItem"):FireServer(hrp)
+
+    task.delay(0.1,function()
+        humanoid:UnequipTools()
+    end)
+
+    local tickStart = tick()
+    local speedDuration = 2.7
+    while tick()-tickStart < speedDuration do
+        local currentDirection = plr.Character.Humanoid.MoveDirection
+        plr.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.new(
+            currentDirection.X * tweenSpeed,
+            plr.Character.HumanoidRootPart.AssemblyLinearVelocity.Y,
+            currentDirection.Z * tweenSpeed
+        )
+        task.wait()
+    end
+    plr.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+
+    humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+end
+
+-- disable speed boost for it to work
+function SAB.TazerSteal:Toggle(boolean)
+    if boolean and not self.connection then
+        self.connection = ProximityPromptService.PromptTriggered:Connect(function(prompt)
+            if prompt:GetAttribute("State") == "Steal" then
+                if not SAB.IsInInventory("Taser Gun") then
+                    return
+                end
+                SAB.TaserSpeedBoost()
+            end
+        end)
+    elseif not boolean and self.connection then
+        self.connection:Disconnect()
+        self.connection = nil
+    end
+end
+
+setthreadidentity(2)
+local ragdollController = require(rs.Controllers.RagdollController)
+setthreadidentity(8)
+SAB.ControlsAlwaysOn = {
+    oldToggleControls = function()
+        
+    end
+}
+function SAB.ControlsAlwaysOn:Init()
+    if self.initiated then
+        return
+    end
+    self.initiated = true
+    setthreadidentity(2)
+    self.oldToggleControls = clonefunction(ragdollController.ToggleControls)
+    setthreadidentity(8)
+end
+function SAB.ControlsAlwaysOn:Toggle(boolean)
+    self:Init()
+    setthreadidentity(2)
+    if boolean then
+        self.oldToggleControls(true)
+        ragdollController.ToggleControls = function(bool)
+            if (not bool) and self.SpeedBoost then
+                SAB.SpeedBoost()
+            end
+        end
+    else
+        ragdollController.ToggleControls = self.oldToggleControls
+    end
+    setthreadidentity(8)
+end
+
+SAB.SpeedBoost = {
+    conn = nil
+}
+function SAB.SpeedBoost:Toggle(boolean) 
+    local Players = game:GetService("Players")
+    local player = Players.LocalPlayer
+
+    if boolean and not self.conn then
+        self.conn = RunService.Stepped:Connect(function(_, dt)
+            local humanoid = plr.Character and plr.Character:FindFirstChild("Humanoid")
+            if not humanoid then
+                return
+            end
+            local character = player.Character or player.CharacterAdded:Wait()
+            local root = character:WaitForChild("HumanoidRootPart")
+            local moveDir = humanoid.MoveDirection
+            local vel = root.AssemblyLinearVelocity
+
+            if moveDir.Magnitude > 0 then
+                -- always boost horizontal
+                local horiz = moveDir.Unit * SAB:GetMaxSpeed()
+
+                -- vertical stays the same unless jumping
+                local newY = vel.Y
+                if humanoid:GetState() == Enum.HumanoidStateType.Jumping then
+                    newY = SAB:GetMaxSpeed() -- or whatever vertical boost you want
+                end
+
+                root.AssemblyLinearVelocity = Vector3.new(horiz.X, newY, horiz.Z)
+            else
+                -- standing still: zero horizontal, keep Y (unless jumping override)
+                local newY = vel.Y
+                if humanoid:GetState() == Enum.HumanoidStateType.Jumping then
+                    newY = SAB:GetMaxSpeed()
+                end
+                root.AssemblyLinearVelocity = Vector3.new(0, newY, 0)
+            end
+        end)
+    elseif not boolean and self.conn then
+        self.conn:Disconnect()
+        self.conn = nil
+    end
+end
+
+-- TODO
+-- fix ragdoll speed
+-- add saving to gui
+-- fix dropdowns on gui
+-- fix setting highlight modes in highlightbestplotanimals
+-- add automatic moving to tasersteal
+-- add highlight to best brainrot on road
+
+--[[
+SAB.TaserSpeedBoost()
+if true then
+    return
+end
+]]--
+
+SAB.ConsoleDetectionsBypass()
+antiAFK()
+for i,v in getconnections(ProximityPromptService.PromptButtonHoldBegan) do -- fix for some prompts disappearing when instant prompts are on
+    v:Disable()
+end
+
+local lib = loadstring(game:HttpGet("https://pastebin.com/raw/W1Lhzdk3"))() -- ui lib
+
+local window = lib.new({
+    Title = "steal a brainrot",
+    KeyCode = Enum.KeyCode.LeftAlt
+})
+
+local main = window:CreateTab({
+    Name = "Main"
+})
+
+main:Toggle({
+    Text = "TazerSteal (disable speed boost for it to work)",
+    Default = false,
+    Callback = function(state)
+        SAB.TazerSteal:Toggle(state)
+    end
+})
+
+main:Separator()
+
+main:Label({
+    Text = "Movement"
+})
+
+main:Toggle({
+    Text = "Speed Boost",
+    Default = false,
+    Callback = function(state)
+        SAB.SpeedBoost:Toggle(state)
+    end
+})
+
+main:Toggle({
+    Text = "Controls Always on",
+    Default = false,
+    Callback = function(state)
+        SAB.ControlsAlwaysOn:Toggle(state)
+    end
+})
+
+main:Toggle({
+    Text = "Jump Boost",
+    Default = false,
+    Callback = function(state)
+        SAB.JumpBoost:Toggle(state)
+    end
+})
+
+main:Slider({
+    Text = "Jump Power",
+    Min = 50,
+    Max = 125,
+    Default = 125,
+    Increment = 1,
+    Callback = function(val)
+        SAB.JumpBoost:SetJumpPower(val)
+    end
+})
+
+main:Separator()
+
+main:Toggle({
+    Text = "NoClip Camera",
+    Default = false,
+    Callback = function(state)
+        SAB.NoClipCamera:Toggle(state)
+    end
+})
+
+main:Toggle({
+    Text = "Instant Proximity Prompts",
+    Default = false,
+    Callback = function(state)
+        SAB.InstantPrompts:Toggle(state)
+    end
+})
+
+main:Toggle({
+    Text = "Disable Client Debuffs",
+    Default = false,
+    Callback = function(state)
+        SAB.DisableClientDebuffs:Toggle(state)
+    end
+})
+
+main:Toggle({
+    Text = "Auto Block Plot",
+    Default = false,
+    Callback = function(state)
+        SAB.AutoBlockPlot:Toggle(state)
+    end
+})
+
+main:Toggle({
+    Text = "Auto Claim Base Cash",
+    Default = false,
+    Callback = function(state)
+        SAB.AutoClaimBaseCash:Toggle(state)
+    end
+})
+
+main:Toggle({
+    Text = "Big Plot Timers",
+    Default = false,
+    Callback = function(state)
+        SAB.BigPlotTimers:Toggle(state)
+    end
+})
+
+main:Separator()
+
+main:Toggle({
+    Text = "Highlight Best Plot Animals",
+    Default = false,
+    Callback = function(state)
+        SAB.HighlightBestPlotAnimals:Toggle(state)
+    end
+})
+
+main:Toggle({
+    Text = "Exclude own Base",
+    Default = true,
+    Callback = function(state)
+        SAB.HighlightBestPlotAnimals:SetExcludeOwnBase(state)
+    end
+})
+
+main:Toggle({
+    Text = "Only Show Best Pets On Map",
+    Default = false,
+    Callback = function(state)
+        SAB.HighlightBestPlotAnimals:SetHighlightEveryBase(not state)
+    end
+})
+
+main:Separator()
+
+main:Label({
+    Text = "Bindings"
+})
+
+main:Toggle({
+    Text = "Reset Bind [R]",
+    Default = false,
+    Callback = function(state)
+        SAB.ResetBind:Toggle(state)
+    end
+})
+
+main:Toggle({
+    Text = "Leave Bind [C]",
+    Default = false,
+    Callback = function(state)
+        SAB.LeaveBind:Toggle(state)
+    end
+})
+
+main:Separator()
+
+main:Button({
+    Text = "Rejoin Same Server",
+    Callback = function()
+        tpService:TeleportToPlaceInstance(game.PlaceId,game.JobId)
+    end
+})
+
+local animations = window:CreateTab({
+    Name = "Animations"
+})
+
+animations:Button({
+    Text = "Reset Animation",
+    Callback = function()
+        SAB.Animations:PlayAnimation()
+    end
+})
+
+for animName,assetId in SAB.Animations.ids do
+    animations:Button({
+        Text = animName,
+        Callback = function()
+            SAB.Animations:PlayAnimation(assetId)
+        end
+    })
+end
